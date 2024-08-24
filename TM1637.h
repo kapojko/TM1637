@@ -45,9 +45,11 @@ void TM1637_Init(struct TM1637_Platform *platform);
 bool TM1637_DisplayRawData(const uint8_t *data, int count, enum TM1637_Brightness brightness);
 bool TM1637_DisplayBCD(const uint8_t *bcd, int count, enum TM1637_Brightness brightness);
 bool TM1637_DisplayASCII(const char *text, enum TM1637_Brightness brightness);
-bool TM1637_DisplayDecimal(int value, int dpPos, enum TM1637_Brightness brightness);
+bool TM1637_DisplayInteger(int value, enum TM1637_Brightness brightness);
 bool TM1637_DisplayFloat(float value, int precision, enum TM1637_Brightness brightness);
 
 bool TM1637_DisplayOff(void);
+
+const char *TM1637_UnitTest(void);
 
 #endif // TM1637_H

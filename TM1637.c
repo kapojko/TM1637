@@ -1,4 +1,5 @@
 #include <string.h>
+#include "MinUnit.h"
 #include "TM1637.h"
 
 #define CLOCK_PERIOD_US 3 // min 1 us (clock frequency should be less than 250K)
@@ -158,6 +159,105 @@ static bool displayControl(enum TM1637_Brightness brightness, enum TM1637_Displa
     return ok;
 }
 
+static void encodeBcd(const uint8_t *bcd, int count, uint8_t *data, int digitNum) {
+    // Check count
+    if (count > TM1637_MAX_DIGITS || count > digitNum) {
+        count = digitNum;
+    }
+
+    int digit = 0;
+
+    // Write blank to left unused digits
+    while (digit < TM1637_MAX_DIGITS - count) {
+        data[digit] = SEG_BL;
+        digit++;
+    }
+
+    // Encode BCD
+    for (int i = 0; i < count; i++) {
+        data[digit] = segmentBCD[bcd[i]];
+        digit++;
+    }
+}
+
+static void encodeAscii(const char *ascii, int count, uint8_t *data, int digitNum) {
+    // Check count
+    if (count > TM1637_MAX_DIGITS || count > digitNum) {
+        count = digitNum;
+    }
+
+    int digit = 0;
+
+    // Write blank to left unused digits
+    while (digit < TM1637_MAX_DIGITS - count) {
+        data[digit] = SEG_BL;
+        digit++;
+    }
+
+    // Encode ASCII
+    for (int i = 0; i < count; i++) {
+        data[digit] = segmentASCII[ascii[i]];
+        digit++;
+    }
+}
+
+static void encodeDecimal(int value, int dpPos, uint8_t *data, int digitNum) {
+    // Check minus sign
+    int minusSign;
+    if (value < 0) {
+        minusSign = 1;
+        value = -value;
+    } else {
+        minusSign = 0;
+    }
+
+    int digit = digitNum - 1;
+
+    // Encode decimal -> BCD -> segment
+    int bcdCount = 0;
+    for (int i = 0; i < TM1637_MAX_DIGITS; i++) {
+        data[digit] = segmentBCD[value % 10];
+        if (digit == digitNum - dpPos) {
+            data[digit] |= SEG_DP;
+        }
+
+        value /= 10;
+        digit--;
+
+        if (value == 0 && (dpPos == -1 || digit < digitNum - dpPos)) {
+            break;
+        }
+
+        bcdCount++;
+    }
+
+    // Write minus sign
+    if (minusSign && digit > 0) {
+        data[digit] = SEG_MN;
+        digit--;
+    }
+
+    // Write blank to left unused digits
+    while (digit >= 0) {
+        data[digit] = SEG_BL;
+        digit--;
+    }
+}
+
+static void encodeInteger(int value, uint8_t *data, int digitNum) {
+    encodeDecimal(value, -1, data, digitNum);
+}
+
+static void encodeFloat(float value, int precision, uint8_t *data, int digitNum) {
+    // Convert to decimal integer
+    for (int i = 0; i < precision; i++) {
+        value *= 10.0f;
+    }
+
+    // Encode decimal
+    encodeDecimal((int)value, (precision > 0) ? precision : -1, data, digitNum);
+}
+
 void TM1637_Init(struct TM1637_Platform *platformPtr) {
     platform = *platformPtr;
 
@@ -198,91 +298,40 @@ bool TM1637_DisplayRawData(const uint8_t *data, int count, enum TM1637_Brightnes
 }
 
 bool TM1637_DisplayBCD(const uint8_t *bcd, int count, enum TM1637_Brightness brightness) {
-    // Check count
-    if (count > TM1637_MAX_DIGITS || count > platform.digitNum) {
-        count = platform.digitNum;
-    }
-
     // Encode BCD
     uint8_t data[TM1637_MAX_DIGITS];
-    for (int i = 0; i < count; i++) {
-        data[i] = segmentBCD[bcd[i]];
-    }
+    encodeBCD(bcd, count, data, platform.digitNum);
 
     // Display data
     return TM1637_DisplayRawData(data, count, brightness);
 }
 
 bool TM1637_DisplayASCII(const char *text, enum TM1637_Brightness brightness) {
-    // Check text length
-    int len = strlen(text);
-    if (len > TM1637_MAX_DIGITS || len > platform.digitNum) {
-        len = platform.digitNum;
-    }
-
     // Encode ASCII
     uint8_t data[TM1637_MAX_DIGITS];
-    for (int i = 0; i < len; i++) {
-        data[i] = segmentASCII[text[i] & 0x7F];
-    }
+    int len = strlen(text);
+    encodeAscii(text, len, data, platform.digitNum);
 
     // Display data
     return TM1637_DisplayRawData(data, len, brightness);
 }
 
-bool TM1637_DisplayDecimal(int value, int dpPos, enum TM1637_Brightness brightness) {
-    // Check minus sign
-    int minusSign = 0;
-    if (value < 0) {
-        minusSign = 1;
-        value = -value;
-    }
-
-    // Encode decimal -> BCD -> segment
+bool TM1637_DisplayInteger(int value, enum TM1637_Brightness brightness) {
+    // Encode integer
     uint8_t data[TM1637_MAX_DIGITS];
-    for (int i = 0; i < TM1637_MAX_DIGITS; i++) {
-        data[TM1637_MAX_DIGITS - i - 1] = segmentBCD[value % 10];
-        value /= 10;
-    }
-
-    // Replace leading zeros with blanks
-    int digit = 0;
-    while (data[digit] == SEG_0 && digit < TM1637_MAX_DIGITS && digit < TM1637_MAX_DIGITS - dpPos - 1) {
-        data[digit] = SEG_BL;
-        digit++;
-    }
-
-    // Prepend with minus sign
-    if (minusSign && digit > 0) {
-        data[digit - 1] = SEG_MN;
-    }
-
-    // Write decimal point
-    if (dpPos >= 0) {
-        data[TM1637_MAX_DIGITS - dpPos - 1] |= SEG_DP;
-    }
-
-    // Shift extra digits (if actual digit count is less than max)
-    if (platform.digitNum < TM1637_MAX_DIGITS) {
-        for (int i = 0; i < platform.digitNum; i++) {
-            data[i] = data[i + TM1637_MAX_DIGITS - platform.digitNum];
-        }
-    }
+    encodeInteger(value, data, platform.digitNum);
 
     // Display data
     return TM1637_DisplayRawData(data, platform.digitNum, brightness);
 }
 
 bool TM1637_DisplayFloat(float value, int precision, enum TM1637_Brightness brightness) {
-    // Convert to decimal integer
-    for (int i = 0; i < precision; i++) {
-        value *= 10.0f;
-    }
+    // Encode float
+    uint8_t data[TM1637_MAX_DIGITS];
+    encodeFloat(value, precision, data, platform.digitNum);
 
-    int decValue = (int)value;
-
-    // Display decimal integer
-    return TM1637_DisplayDecimal(decValue, (precision > 0) ? precision : -1, brightness);
+    // Display data
+    return TM1637_DisplayRawData(data, platform.digitNum, brightness);
 }
 
 bool TM1637_DisplayOff(void) {
@@ -297,4 +346,40 @@ bool TM1637_DisplayOff(void) {
     }
 
     return ok;
+}
+
+const char *TM1637_UnitTest(void) {
+    uint8_t data[TM1637_MAX_DIGITS];
+
+    // Test encode BCD
+    uint8_t bcd1[4] = {0x1, 0x2, 0xA, 0xB};
+    encodeBCD(bcd1, 4, data, 4);
+    mu_assert("bcd1", data[0] == SEG_1 && data[1] == SEG_2 && data[2] == SEG_A && data[3] == SEG_B);
+
+    // Test encode ASCII
+    char ascii1[] = "34dE";
+    encodeAscii(ascii1, 4, data, 4);
+    mu_assert("ascii1", data[0] == SEG_3 && data[1] == SEG_4 && data[2] == SEG_D && data[3] == SEG_E);
+
+    // Test encode integer (positive)
+    int integer1 = 12;
+    encodeInteger(integer1, data, 4);
+    mu_assert("integer1", data[0] == SEG_BL && data[1] == SEG_BL && data[2] == SEG_1 && data[3] == SEG_2);
+
+    // Test encode integer (negative)
+    int integer2 = -12;
+    encodeInteger(integer2, data, 4);
+    mu_assert("integer2", data[0] == SEG_BL && data[1] == SEG_MN && data[2] == SEG_1 && data[3] == SEG_2);
+
+    // Test encode integer (big number)
+    int integer3 = -987654321;
+    encodeInteger(integer3, data, 4);
+    mu_assert("integer3", data[0] == SEG_4 && data[1] == SEG_3 && data[2] == SEG_2 && data[3] == SEG_1);
+
+    // Test encode float
+    float float1 = 12.34;
+    encodeFloat(float1, 2, data, 4);
+    mu_assert("float1", data[0] == SEG_1 && data[1] == SEG_2|SEG_DP && data[2] == SEG_3 && data[3] == SEG_4);
+
+    return 0;
 }
