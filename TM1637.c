@@ -196,7 +196,7 @@ static void encodeASCII(const char *ascii, int count, uint8_t *data, int digitNu
 
     // Encode ASCII
     for (int i = 0; i < count; i++) {
-        data[digit] = segmentASCII[ascii[i]];
+        data[digit] = segmentASCII[(int)ascii[i]];
         digit++;
     }
 }
