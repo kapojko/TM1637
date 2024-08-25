@@ -77,6 +77,8 @@ static const uint8_t segmentASCII[256] = {
 };
 
 static void sendStart(void) {
+    // DIO high, CLK high beforehand
+
     // Drop DIO, CLK high
     platform.gpioSet(platform.pinDIO, 0);
 
@@ -85,11 +87,15 @@ static void sendStart(void) {
 }
 
 static bool sendByte(uint8_t data) {
+    // uint8_t data_init = data;
+
     for (int i = 0; i < 8; i++) {
         // Clock low, load data bit
         platform.gpioSet(platform.pinCLK, 0);
+        platform.delayUs(CLOCK_PERIOD_US / 2);
+
         platform.gpioSet(platform.pinDIO, data & 0x01);
-        platform.delayUs(CLOCK_PERIOD_US);
+        platform.delayUs(CLOCK_PERIOD_US / 2);
 
         // Clock high, keep data bit
         platform.gpioSet(platform.pinCLK, 1);
@@ -100,8 +106,9 @@ static bool sendByte(uint8_t data) {
     }
 
     // Release DIO before the falling edge to read chip ACK
-    platform.gpioSwitch(platform.pinDIO, TM1637_GPIO_FLOATING_INPUT);
+    // NOTE: if switch before drop, ACK will not be detected, why??
     platform.gpioSet(platform.pinCLK, 0);
+    platform.gpioSwitch(platform.pinDIO, TM1637_GPIO_PULLUP_INPUT);
     platform.delayUs(CLOCK_PERIOD_US);
 
     // Read ACK, should be low
@@ -109,25 +116,25 @@ static bool sendByte(uint8_t data) {
     platform.gpioSet(platform.pinCLK, 1);
     platform.delayUs(CLOCK_PERIOD_US);
 
-    // Take DIO back
-    // TODO: should this be done after 9-th clock pulse end (falling edge)?
+    // Take DIO back after 9-th clock pulse end (falling edge)
+    platform.gpioSet(platform.pinCLK, 0);
+    platform.delayUs(CLOCK_PERIOD_US);
     platform.gpioSwitch(platform.pinDIO, TM1637_GPIO_PULLUP_OUTPUT);
 
+    // platform.debugPrint("send byte %02X, ack %d\r\n", data_init, ack);
     return !ack;
 }
 
 static void sendStop(void) {
-    // CLK low, DIO low
-    platform.gpioSet(platform.pinCLK, 0);
+    // CLK low beforehand, DIO low
     platform.gpioSet(platform.pinDIO, 0);
     platform.delayUs(CLOCK_PERIOD_US);
 
-    // CLK high, DIO low
+    // CLK high, DIO keeping low
     platform.gpioSet(platform.pinCLK, 1);
-    platform.gpioSet(platform.pinDIO, 0);
     platform.delayUs(CLOCK_PERIOD_US);
 
-    // CLK high, DIO low to high - end of transmission
+    // CLK keeping high, DIO low to high - end of transmission
     platform.gpioSet(platform.pinDIO, 1);
     platform.delayUs(CLOCK_PERIOD_US);
 }
@@ -236,7 +243,7 @@ static void encodeDecimal(int value, int dpPos, uint8_t *data, int digitNum) {
     }
 
     // Write minus sign
-    if (minusSign && digit > 0) {
+    if (minusSign && digit >= 0) {
         data[digit] = SEG_MN;
         digit--;
     }
@@ -267,10 +274,15 @@ void TM1637_Init(struct TM1637_Platform *platformPtr) {
 
     // Init GPIO
     platform.gpioSwitch(platform.pinCLK, TM1637_GPIO_PULLUP_OUTPUT);
-    platform.gpioSet(platform.pinCLK, 1);
+    platform.gpioSet(platform.pinCLK, 0); // set 0 for the initial state to avoid spurious start command
+    platform.delayUs(CLOCK_PERIOD_US);
 
     platform.gpioSwitch(platform.pinDIO, TM1637_GPIO_PULLUP_OUTPUT);
     platform.gpioSet(platform.pinDIO, 1);
+    platform.delayUs(CLOCK_PERIOD_US);
+
+    platform.gpioSet(platform.pinCLK, 1);
+    platform.delayUs(CLOCK_PERIOD_US);
 }
 
 bool TM1637_DisplayRawData(const uint8_t *data, int count, enum TM1637_Brightness brightness) {
