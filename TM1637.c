@@ -63,7 +63,7 @@ static const uint8_t segmentASCII[256] = {
     // 0x10 - 0x1F
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     // 0x20 - 0x2F
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, SEG_DP, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, SEG_MN, SEG_DP, 0,
     // 0x30 - 0x3F
     SEG_0, SEG_1, SEG_2, SEG_3, SEG_4, SEG_5, SEG_6, SEG_7, SEG_8, SEG_9, 0, 0, 0, 0, 0, 0,
     // 0x40 - 0x4F
