@@ -328,6 +328,15 @@ bool TM1637_DisplayASCII(struct TM1637_Platform *p, const char *text, enum TM163
     return TM1637_DisplayRawData(p, data, len, brightness);
 }
 
+bool TM1637_DisplayDecimal(struct TM1637_Platform *p, int value, int dpPos, enum TM1637_Brightness brightness) {
+    // Encode decimal
+    uint8_t data[TM1637_MAX_DIGITS];
+    encodeDecimal(value, dpPos, data, p->digitNum);
+
+    // Display data
+    return TM1637_DisplayRawData(p, data, p->digitNum, brightness);
+}
+
 bool TM1637_DisplayInteger(struct TM1637_Platform *p, int value, enum TM1637_Brightness brightness) {
     // Encode integer
     uint8_t data[TM1637_MAX_DIGITS];
