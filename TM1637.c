@@ -233,7 +233,7 @@ static void encodeDecimal(int value, int dpPos, uint8_t *data, int digitNum) {
             break;
         }
 
-        if (value == 0 && (dpPos == -1 || digit < digitNum - dpPos)) {
+        if (value == 0 && (dpPos == -1 || digit < digitNum - dpPos - 1)) {
             break;
         }
 
