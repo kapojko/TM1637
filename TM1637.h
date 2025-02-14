@@ -28,27 +28,29 @@ enum TM1637_GPIOConfig {
 };
 
 struct TM1637_Platform {
-    int (*gpioGet)(int pin);
-    void (*gpioSet)(int pin, int value);
-    void (*gpioSwitch)(int pin, enum TM1637_GPIOConfig config);
+    int (*gpioGetClk)();
+    void (*gpioSetClk)(int value);
+    void (*gpioSwitchClk)(enum TM1637_GPIOConfig config);
+
+    int (*gpioGetIO)();
+    void (*gpioSetIO)(int value);
+    void (*gpioSwitchIO)(enum TM1637_GPIOConfig config);
 
     void (*delayUs)(int us);
     void (*debugPrint)(const char *fmt, ...);
 
     int digitNum;
-    int pinDIO;
-    int pinCLK;
 };
 
-void TM1637_Init(struct TM1637_Platform *platform);
+void TM1637_Init(struct TM1637_Platform *p);
 
-bool TM1637_DisplayRawData(const uint8_t *data, int count, enum TM1637_Brightness brightness);
-bool TM1637_DisplayBCD(const uint8_t *bcd, int count, enum TM1637_Brightness brightness);
-bool TM1637_DisplayASCII(const char *text, enum TM1637_Brightness brightness);
-bool TM1637_DisplayInteger(int value, enum TM1637_Brightness brightness);
-bool TM1637_DisplayFloat(float value, int precision, enum TM1637_Brightness brightness);
+bool TM1637_DisplayRawData(struct TM1637_Platform *p, const uint8_t *data, int count, enum TM1637_Brightness brightness);
+bool TM1637_DisplayBCD(struct TM1637_Platform *p, const uint8_t *bcd, int count, enum TM1637_Brightness brightness);
+bool TM1637_DisplayASCII(struct TM1637_Platform *p, const char *text, enum TM1637_Brightness brightness);
+bool TM1637_DisplayInteger(struct TM1637_Platform *p, int value, enum TM1637_Brightness brightness);
+bool TM1637_DisplayFloat(struct TM1637_Platform *p, float value, int precision, enum TM1637_Brightness brightness);
 
-bool TM1637_DisplayOff(void);
+bool TM1637_DisplayOff(struct TM1637_Platform *p);
 
 const char *TM1637_UnitTest(void);
 

@@ -36,8 +36,6 @@
 #define SEG_MN 0x40 // 0b01000000 : -
 #define SEG_BL 0x00 // 0b00000000 : Blank
 
-static struct TM1637_Platform platform;
-
 static const uint8_t segmentBCD[16] = {
     SEG_0,
     SEG_1,
@@ -76,30 +74,30 @@ static const uint8_t segmentASCII[256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
-static void sendStart(void) {
+static void sendStart(struct TM1637_Platform *p) {
     // DIO high, CLK high beforehand
 
     // Drop DIO, CLK high
-    platform.gpioSet(platform.pinDIO, 0);
+    p->gpioSetIO(0);
 
     // Wait clock period (NOTE: maybe period can be reduced)
-    platform.delayUs(CLOCK_PERIOD_US);
+    p->delayUs(CLOCK_PERIOD_US);
 }
 
-static bool sendByte(uint8_t data) {
+static bool sendByte(struct TM1637_Platform *p, uint8_t data) {
     // uint8_t data_init = data;
 
     for (int i = 0; i < 8; i++) {
         // Clock low, load data bit
-        platform.gpioSet(platform.pinCLK, 0);
-        platform.delayUs(CLOCK_PERIOD_US / 2);
+        p->gpioSetClk(0);
+        p->delayUs(CLOCK_PERIOD_US / 2);
 
-        platform.gpioSet(platform.pinDIO, data & 0x01);
-        platform.delayUs(CLOCK_PERIOD_US / 2);
+        p->gpioSetIO(data & 0x01);
+        p->delayUs(CLOCK_PERIOD_US / 2);
 
         // Clock high, keep data bit
-        platform.gpioSet(platform.pinCLK, 1);
-        platform.delayUs(CLOCK_PERIOD_US);
+        p->gpioSetClk(1);
+        p->delayUs(CLOCK_PERIOD_US);
 
         // Next bit
         data >>= 1;
@@ -107,61 +105,61 @@ static bool sendByte(uint8_t data) {
 
     // Release DIO before the falling edge to read chip ACK
     // NOTE: if switch before drop, ACK will not be detected, why??
-    platform.gpioSet(platform.pinCLK, 0);
-    platform.gpioSwitch(platform.pinDIO, TM1637_GPIO_PULLUP_INPUT);
-    platform.delayUs(CLOCK_PERIOD_US);
+    p->gpioSetClk(0);
+    p->gpioSwitchIO(TM1637_GPIO_PULLUP_INPUT);
+    p->delayUs(CLOCK_PERIOD_US);
 
     // Read ACK, should be low
-    int ack = platform.gpioGet(platform.pinDIO);
-    platform.gpioSet(platform.pinCLK, 1);
-    platform.delayUs(CLOCK_PERIOD_US);
+    int ack = p->gpioGetIO();
+    p->gpioSetClk(1);
+    p->delayUs(CLOCK_PERIOD_US);
 
     // Take DIO back after 9-th clock pulse end (falling edge)
-    platform.gpioSet(platform.pinCLK, 0);
-    platform.delayUs(CLOCK_PERIOD_US);
-    platform.gpioSwitch(platform.pinDIO, TM1637_GPIO_PULLUP_OUTPUT);
+    p->gpioSetClk(0);
+    p->delayUs(CLOCK_PERIOD_US);
+    p->gpioSwitchIO(TM1637_GPIO_PULLUP_OUTPUT);
 
-    // platform.debugPrint("send byte %02X, ack %d\r\n", data_init, ack);
+    // p->debugPrint("send byte %02X, ack %d\r\n", data_init, ack);
     return !ack;
 }
 
-static void sendStop(void) {
+static void sendStop(struct TM1637_Platform *p) {
     // CLK low beforehand, DIO low
-    platform.gpioSet(platform.pinDIO, 0);
-    platform.delayUs(CLOCK_PERIOD_US);
+    p->gpioSetIO(0);
+    p->delayUs(CLOCK_PERIOD_US);
 
     // CLK high, DIO keeping low
-    platform.gpioSet(platform.pinCLK, 1);
-    platform.delayUs(CLOCK_PERIOD_US);
+    p->gpioSetClk(1);
+    p->delayUs(CLOCK_PERIOD_US);
 
     // CLK keeping high, DIO low to high - end of transmission
-    platform.gpioSet(platform.pinDIO, 1);
-    platform.delayUs(CLOCK_PERIOD_US);
+    p->gpioSetIO(1);
+    p->delayUs(CLOCK_PERIOD_US);
 }
 
-static bool dataCommandSet(int dataMode, int addrMode, int testMode) {
+static bool dataCommandSet(struct TM1637_Platform *p, int dataMode, int addrMode, int testMode) {
     bool ok;
 
     uint8_t data = 0100 | dataMode | addrMode | testMode;
-    ok = sendByte(data);
+    ok = sendByte(p, data);
 
     return ok;
 }
 
-static bool addrCommandSet(int addr) {
+static bool addrCommandSet(struct TM1637_Platform *p, int addr) {
     bool ok;
 
     uint8_t data = 0300 | (addr & 07);
-    ok = sendByte(data);
+    ok = sendByte(p, data);
 
     return ok;
 }
 
-static bool displayControl(enum TM1637_Brightness brightness, enum TM1637_DisplayOn on) {
+static bool displayControl(struct TM1637_Platform *p, enum TM1637_Brightness brightness, enum TM1637_DisplayOn on) {
     bool ok;
 
     uint8_t data = 0200 | brightness | on;
-    ok = sendByte(data);
+    ok = sendByte(p, data);
 
     return ok;
 }
@@ -269,96 +267,94 @@ static void encodeFloat(float value, int precision, uint8_t *data, int digitNum)
     encodeDecimal((int)value, (precision > 0) ? precision : -1, data, digitNum);
 }
 
-void TM1637_Init(struct TM1637_Platform *platformPtr) {
-    platform = *platformPtr;
-
+void TM1637_Init(struct TM1637_Platform *p) {
     // Init GPIO
-    platform.gpioSwitch(platform.pinCLK, TM1637_GPIO_PULLUP_OUTPUT);
-    platform.gpioSet(platform.pinCLK, 0); // set 0 for the initial state to avoid spurious start command
-    platform.delayUs(CLOCK_PERIOD_US);
+    p->gpioSwitchClk(TM1637_GPIO_PULLUP_OUTPUT);
+    p->gpioSetClk(0); // set 0 for the initial state to avoid spurious start command
+    p->delayUs(CLOCK_PERIOD_US);
 
-    platform.gpioSwitch(platform.pinDIO, TM1637_GPIO_PULLUP_OUTPUT);
-    platform.gpioSet(platform.pinDIO, 1);
-    platform.delayUs(CLOCK_PERIOD_US);
+    p->gpioSwitchIO(TM1637_GPIO_PULLUP_OUTPUT);
+    p->gpioSetIO(1);
+    p->delayUs(CLOCK_PERIOD_US);
 
-    platform.gpioSet(platform.pinCLK, 1);
-    platform.delayUs(CLOCK_PERIOD_US);
+    p->gpioSetClk(1);
+    p->delayUs(CLOCK_PERIOD_US);
 }
 
-bool TM1637_DisplayRawData(const uint8_t *data, int count, enum TM1637_Brightness brightness) {
+bool TM1637_DisplayRawData(struct TM1637_Platform *p, const uint8_t *data, int count, enum TM1637_Brightness brightness) {
     bool ok = true;
 
     // Data command setting (auto address increment)
-    sendStart();
-    ok &= dataCommandSet(TM1637_WRITE_DISPLAY, TM1637_ADDR_ADD, TM1637_NORMAL_MODE);
-    sendStop();
+    sendStart(p);
+    ok &= dataCommandSet(p, TM1637_WRITE_DISPLAY, TM1637_ADDR_ADD, TM1637_NORMAL_MODE);
+    sendStop(p);
 
     // Set initial address and write data bytes
-    sendStart();
-    ok &= addrCommandSet(0);
+    sendStart(p);
+    ok &= addrCommandSet(p, 0);
     for (int i = 0; i < count; i++) {
-        ok &= sendByte(data[i]);
+        ok &= sendByte(p, data[i]);
     }
-    sendStop();
+    sendStop(p);
 
     // Display control
-    sendStart();
-    ok &= displayControl(brightness, TM1637_DISPLAY_ON);
-    sendStop();
+    sendStart(p);
+    ok &= displayControl(p, brightness, TM1637_DISPLAY_ON);
+    sendStop(p);
 
     if (!ok) {
-        platform.debugPrint("TM1637: Failed to display data (ACK error)\r\n");
+        p->debugPrint("TM1637: Failed to display data (ACK error)\r\n");
     }
 
     return ok;
 }
 
-bool TM1637_DisplayBCD(const uint8_t *bcd, int count, enum TM1637_Brightness brightness) {
+bool TM1637_DisplayBCD(struct TM1637_Platform *p, const uint8_t *bcd, int count, enum TM1637_Brightness brightness) {
     // Encode BCD
     uint8_t data[TM1637_MAX_DIGITS];
-    encodeBCD(bcd, count, data, platform.digitNum);
+    encodeBCD(bcd, count, data, p->digitNum);
 
     // Display data
-    return TM1637_DisplayRawData(data, count, brightness);
+    return TM1637_DisplayRawData(p, data, count, brightness);
 }
 
-bool TM1637_DisplayASCII(const char *text, enum TM1637_Brightness brightness) {
+bool TM1637_DisplayASCII(struct TM1637_Platform *p, const char *text, enum TM1637_Brightness brightness) {
     // Encode ASCII
     uint8_t data[TM1637_MAX_DIGITS];
     int len = (int)strlen(text);
-    encodeASCII(text, len, data, platform.digitNum);
+    encodeASCII(text, len, data, p->digitNum);
 
     // Display data
-    return TM1637_DisplayRawData(data, len, brightness);
+    return TM1637_DisplayRawData(p, data, len, brightness);
 }
 
-bool TM1637_DisplayInteger(int value, enum TM1637_Brightness brightness) {
+bool TM1637_DisplayInteger(struct TM1637_Platform *p, int value, enum TM1637_Brightness brightness) {
     // Encode integer
     uint8_t data[TM1637_MAX_DIGITS];
-    encodeInteger(value, data, platform.digitNum);
+    encodeInteger(value, data, p->digitNum);
 
     // Display data
-    return TM1637_DisplayRawData(data, platform.digitNum, brightness);
+    return TM1637_DisplayRawData(p, data, p->digitNum, brightness);
 }
 
-bool TM1637_DisplayFloat(float value, int precision, enum TM1637_Brightness brightness) {
+bool TM1637_DisplayFloat(struct TM1637_Platform *p, float value, int precision, enum TM1637_Brightness brightness) {
     // Encode float
     uint8_t data[TM1637_MAX_DIGITS];
-    encodeFloat(value, precision, data, platform.digitNum);
+    encodeFloat(value, precision, data, p->digitNum);
 
     // Display data
-    return TM1637_DisplayRawData(data, platform.digitNum, brightness);
+    return TM1637_DisplayRawData(p, data, p->digitNum, brightness);
 }
 
-bool TM1637_DisplayOff(void) {
+bool TM1637_DisplayOff(struct TM1637_Platform *p) {
     bool ok;
 
-    sendStart();
-    ok = displayControl(TM1637_BRIGHTNESS_1_16, TM1637_DISPLAY_OFF);
-    sendStop();
+    sendStart(p);
+    ok = displayControl(p, TM1637_BRIGHTNESS_1_16, TM1637_DISPLAY_OFF);
+    sendStop(p);
 
     if (!ok) {
-        platform.debugPrint("TM1637: Failed to display off (ACK error)\r\n");
+        p->debugPrint("TM1637: Failed to display off (ACK error)\r\n");
     }
 
     return ok;
