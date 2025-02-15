@@ -6,6 +6,8 @@
 
 #define TM1637_MAX_DIGITS 6
 
+#define TM1637_FLAG_PAD_ZEROS 01
+
 enum TM1637_Brightness {
     TM1637_BRIGHTNESS_1_16 = 00,
     TM1637_BRIGHTNESS_2_16 = 01,
@@ -48,7 +50,7 @@ bool TM1637_DisplayRawData(struct TM1637_Platform *p, const uint8_t *data, int c
 bool TM1637_DisplayBCD(struct TM1637_Platform *p, const uint8_t *bcd, int count, enum TM1637_Brightness brightness);
 bool TM1637_DisplayASCII(struct TM1637_Platform *p, const char *text, enum TM1637_Brightness brightness);
 
-bool TM1637_DisplayDecimal(struct TM1637_Platform *p, int value, int dpPos, enum TM1637_Brightness brightness);
+bool TM1637_DisplayDecimal(struct TM1637_Platform *p, int value, int dpPos, enum TM1637_Brightness brightness, int flags);
 bool TM1637_DisplayInteger(struct TM1637_Platform *p, int value, enum TM1637_Brightness brightness);
 bool TM1637_DisplayFloat(struct TM1637_Platform *p, float value, int precision, enum TM1637_Brightness brightness);
 

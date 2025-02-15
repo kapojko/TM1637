@@ -206,7 +206,7 @@ static void encodeASCII(const char *ascii, int count, uint8_t *data, int digitNu
     }
 }
 
-static void encodeDecimal(int value, int dpPos, uint8_t *data, int digitNum) {
+static void encodeDecimal(int value, int dpPos, uint8_t *data, int digitNum, int flags) {
     // Check minus sign
     int minusSign;
     if (value < 0) {
@@ -242,19 +242,27 @@ static void encodeDecimal(int value, int dpPos, uint8_t *data, int digitNum) {
 
     // Write minus sign
     if (minusSign && digit >= 0) {
+        // If pad zeros is enabled, pad zeros to left
+        if (flags & TM1637_FLAG_PAD_ZEROS) {
+            while (digit > 0) {
+                data[digit] = SEG_0;
+                digit--;
+            }
+        }
+
         data[digit] = SEG_MN;
         digit--;
     }
 
     // Write blank to left unused digits
     while (digit >= 0) {
-        data[digit] = SEG_BL;
+        data[digit] = (flags & TM1637_FLAG_PAD_ZEROS) ? SEG_0 : SEG_BL;
         digit--;
     }
 }
 
 static void encodeInteger(int value, uint8_t *data, int digitNum) {
-    encodeDecimal(value, -1, data, digitNum);
+    encodeDecimal(value, -1, data, digitNum, 0);
 }
 
 static void encodeFloat(float value, int precision, uint8_t *data, int digitNum) {
@@ -264,7 +272,7 @@ static void encodeFloat(float value, int precision, uint8_t *data, int digitNum)
     }
 
     // Encode decimal
-    encodeDecimal((int)value, (precision > 0) ? precision : -1, data, digitNum);
+    encodeDecimal((int)value, (precision > 0) ? precision : -1, data, digitNum, 0);
 }
 
 void TM1637_Init(struct TM1637_Platform *p) {
@@ -328,10 +336,10 @@ bool TM1637_DisplayASCII(struct TM1637_Platform *p, const char *text, enum TM163
     return TM1637_DisplayRawData(p, data, len, brightness);
 }
 
-bool TM1637_DisplayDecimal(struct TM1637_Platform *p, int value, int dpPos, enum TM1637_Brightness brightness) {
+bool TM1637_DisplayDecimal(struct TM1637_Platform *p, int value, int dpPos, enum TM1637_Brightness brightness, int flags) {
     // Encode decimal
     uint8_t data[TM1637_MAX_DIGITS];
-    encodeDecimal(value, dpPos, data, p->digitNum);
+    encodeDecimal(value, dpPos, data, p->digitNum, flags);
 
     // Display data
     return TM1637_DisplayRawData(p, data, p->digitNum, brightness);
@@ -401,6 +409,26 @@ const char *TM1637_UnitTest(void) {
     float float1 = 12.34f;
     encodeFloat(float1, 2, data, 4);
     mu_assert("float1", data[0] == SEG_1 && data[1] == (SEG_2|SEG_DP) && data[2] == SEG_3 && data[3] == SEG_4);
+
+    // Test encode decimal with blank padding (positive)
+    int decimal1 = 12;
+    encodeDecimal(decimal1, 1, data, 4, 0);
+    mu_assert("decimal1", data[0] == SEG_BL && data[1] == SEG_BL && data[2] == (SEG_1 | SEG_DP) && data[3] == SEG_2);
+
+    // Test encode decimal with blank padding (negative)
+    int decimal2 = -12;
+    encodeDecimal(decimal2, 1, data, 4, 0);
+    mu_assert("decimal2", data[0] == SEG_BL && data[1] == SEG_MN && data[2] == (SEG_1 | SEG_DP) && data[3] == SEG_2);
+
+    // Test encode decimal with zero padding (positive)
+    int decimal3 = 12;
+    encodeDecimal(decimal3, 1, data, 4, TM1637_FLAG_PAD_ZEROS);
+    mu_assert("decimal3", data[0] == SEG_0 && data[1] == SEG_0 && data[2] == (SEG_1 | SEG_DP) && data[3] == SEG_2);
+
+    // Test encode decimal with zero padding (negative)
+    int decimal4 = -12;
+    encodeDecimal(decimal4, -1, data, 4, TM1637_FLAG_PAD_ZEROS);
+    mu_assert("decimal4", data[0] == SEG_MN && data[1] == SEG_0 && data[2] == SEG_1 && data[3] == SEG_2);
 
     return 0;
 }
