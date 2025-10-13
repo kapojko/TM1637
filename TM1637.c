@@ -289,8 +289,13 @@ void TM1637_Init(struct TM1637_Platform *p) {
     p->delayUs(CLOCK_PERIOD_US);
 }
 
-bool TM1637_DisplayRawData(struct TM1637_Platform *p, const uint8_t *data, int count, enum TM1637_Brightness brightness) {
+bool TM1637_DisplayRawData(struct TM1637_Platform *p, uint8_t *data, int count, enum TM1637_Brightness brightness) {
     bool ok = true;
+
+    // Reorder data if callback is present
+    if (p->digitReorderCallback) {
+        p->digitReorderCallback(data, count);
+    }
 
     // Data command setting (auto address increment)
     sendStart(p);

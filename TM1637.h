@@ -41,12 +41,14 @@ struct TM1637_Platform {
     void (*delayUs)(int us);
     void (*debugPrint)(const char *fmt, ...);
 
+    void (*digitReorderCallback)(uint8_t *data, int count);
+
     int digitNum;
 };
 
 void TM1637_Init(struct TM1637_Platform *p);
 
-bool TM1637_DisplayRawData(struct TM1637_Platform *p, const uint8_t *data, int count, enum TM1637_Brightness brightness);
+bool TM1637_DisplayRawData(struct TM1637_Platform *p, uint8_t *data, int count, enum TM1637_Brightness brightness);
 bool TM1637_DisplayBCD(struct TM1637_Platform *p, const uint8_t *bcd, int count, enum TM1637_Brightness brightness);
 bool TM1637_DisplayASCII(struct TM1637_Platform *p, const char *text, enum TM1637_Brightness brightness);
 
