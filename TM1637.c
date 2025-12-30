@@ -233,7 +233,7 @@ static void encodeDecimal(int value, int dpPos, uint8_t *data, int digitNum, int
             break;
         }
 
-        if (value == 0 && (dpPos == -1 || digit < digitNum - dpPos - 1)) {
+        if (value == 0 && (dpPos == TM1637_DP_NONE || digit < digitNum - dpPos - 1)) {
             break;
         }
 
@@ -365,6 +365,11 @@ bool TM1637_DisplayFloat(struct TM1637_Platform *p, float value, int precision, 
     encodeFloat(value, precision, data, p->digitNum);
 
     // Display data
+    return TM1637_DisplayRawData(p, data, p->digitNum, brightness);
+}
+
+bool TM1637_DisplayNone(struct TM1637_Platform *p, enum TM1637_Brightness brightness) {
+    uint8_t data[TM1637_MAX_DIGITS] = {0};
     return TM1637_DisplayRawData(p, data, p->digitNum, brightness);
 }
 
